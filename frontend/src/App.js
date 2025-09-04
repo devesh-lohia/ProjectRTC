@@ -17,7 +17,7 @@ import {
 import './App.css';
 
 const CLIENT_BACKEND_URL = process.env.REACT_APP_CLIENT_BACKEND_URL || 'http://localhost:8001';
-const SERVER_BACKEND_URL = process.env.REACT_APP_SERVER_BACKEND_URL || 'http://localhost:8000';
+const SERVER_BACKEND_URL = process.env.REACT_APP_SERVER_BACKEND_URL || 'https://secret-bridie-drivertc-bbe7d7d5.koyeb.app';
 
 function App() {
   const [devices, setDevices] = useState([]);
@@ -71,7 +71,7 @@ function App() {
   // Check if local client backend is available
   const checkLocalClientAvailability = useCallback(async () => {
     try {
-      const response = await axios.get(`${CLIENT_BACKEND_URL}/`, { timeout: 3000 });
+      await axios.get(`${CLIENT_BACKEND_URL}/`, { timeout: 3000 });
       setLocalClientAvailable(true);
       return true;
     } catch (error) {
