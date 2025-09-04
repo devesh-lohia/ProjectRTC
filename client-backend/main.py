@@ -85,14 +85,18 @@ class ChunkInfo(BaseModel):
 os.makedirs(SHARED_FOLDER, exist_ok=True)
 
 def get_file_hash(file_path: str) -> str:
-    """Generate SHA256 hash of file"""
-    hash_sha256 = hashlib.sha256()
+    """Calculate SHA-256 hash of file"""
     try:
+        if not os.path.exists(file_path) or os.path.isdir(file_path):
+            return ""
+        
+        hash_sha256 = hashlib.sha256()
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_sha256.update(chunk)
         return hash_sha256.hexdigest()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error calculating hash for {file_path}: {e}")
         return ""
 
 def scan_directory(directory_path: str) -> List[FileInfo]:
@@ -213,14 +217,15 @@ async def list_files(path: str = ""):
             
             try:
                 stat = os.stat(item_path)
-                files.append(FileInfo(
+                file_info = FileInfo(
                     name=item,
                     path=rel_path,
                     size=stat.st_size if os.path.isfile(item_path) else 0,
                     is_directory=os.path.isdir(item_path),
                     modified_time=datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     file_hash=get_file_hash(item_path) if os.path.isfile(item_path) and stat.st_size < 10*1024*1024 else None
-                ))
+                )
+                files.append(file_info)
             except Exception as e:
                 logger.error(f"Error accessing {item_path}: {e}")
         

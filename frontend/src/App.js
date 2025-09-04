@@ -420,7 +420,19 @@ function App() {
                 onClick={() => handleDeviceSelect(device)}
               >
                 <Monitor size={16} />
-                <span>{device.device_name}</span>
+                <div className="device-info">
+                  <span className="device-name">{device.device_name}</span>
+                  {device.ip_address && (
+                    <div className="device-address">
+                      {device.ip_address}:{device.local_port || 8001}
+                    </div>
+                  )}
+                  {device.backend_url && (
+                    <div className="device-backend">
+                      <small>{device.backend_url}</small>
+                    </div>
+                  )}
+                </div>
                 <div className={`status ${device.status}`}></div>
               </div>
             ))}

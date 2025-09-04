@@ -77,13 +77,43 @@
 }
 
 .device-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-color: #667eea;
   color: white;
+  border-color: #5a67d8;
 }
 
 .device-item span {
   flex: 1;
   font-weight: 500;
+}
+
+.device-info {
+  flex: 1;
+}
+
+.device-name {
+  font-weight: 500;
+  display: block;
+}
+
+.device-address {
+  font-size: 0.8em;
+  color: #666;
+  margin-top: 2px;
+}
+
+.device-backend {
+  font-size: 0.7em;
+  color: #888;
+  margin-top: 1px;
+}
+
+.device-item.active .device-address {
+  color: #e6f3ff;
+}
+
+.device-item.active .device-backend {
+  color: #cce7ff;
 }
 
 .status {
