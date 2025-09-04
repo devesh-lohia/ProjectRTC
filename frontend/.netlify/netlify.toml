@@ -1,0 +1,42 @@
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/deveshlohia/Documents/GitHub/ProjectRTC/frontend/build"
+publishOrigin = "config"
+commandOrigin = "config"
+base = "/Users/deveshlohia/Documents/GitHub/ProjectRTC/frontend"
+command = "npm run build"
+
+[build.environment]
+REACT_APP_SERVER_BACKEND_URL = "https://secret-bridie-drivertc-bbe7d7d5.koyeb.app"
+REACT_APP_CLIENT_BACKEND_URL = "http://localhost:8001"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
