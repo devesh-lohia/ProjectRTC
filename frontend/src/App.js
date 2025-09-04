@@ -36,12 +36,50 @@ function App() {
   const [webrtcManager, setWebrtcManager] = useState(null);
   const [p2pConnections, setP2pConnections] = useState(new Map());
   const [transferProgress, setTransferProgress] = useState(new Map());
+  const [frontendPublicIP, setFrontendPublicIP] = useState(null);
+  const [backendPublicIP, setBackendPublicIP] = useState(null);
+
+  // Get public IP using STUN server
+  const getPublicIP = async () => {
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      
+      pc.createDataChannel('');
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      return new Promise((resolve) => {
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const candidate = event.candidate.candidate;
+            const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
+            if (ipMatch && !ipMatch[1].startsWith('192.168.') && !ipMatch[1].startsWith('10.') && !ipMatch[1].startsWith('172.')) {
+              pc.close();
+              resolve(ipMatch[1]);
+            }
+          }
+        };
+        
+        setTimeout(() => {
+          pc.close();
+          resolve(null);
+        }, 5000);
+      });
+    } catch (error) {
+      console.error('Failed to get public IP:', error);
+      return null;
+    }
+  };
 
   // Fetch clients from server
   const fetchClientsFromServer = useCallback(async () => {
     try {
+      console.log('Fetching clients from server...');
       const response = await axios.get(`${SERVER_BACKEND_URL}/clients`);
       const serverClients = response.data.clients;
+      console.log('Server clients:', serverClients);
       
       // Add local client if we have one
       const allDevices = [];
@@ -51,6 +89,7 @@ function App() {
           device_name: 'This Device (Local)',
           status: 'online',
           isLocal: true,
+          ip_address: frontendPublicIP,
           backend_url: CLIENT_BACKEND_URL,
           websocket_url: CLIENT_BACKEND_URL.replace('http', 'ws')
         });
@@ -58,7 +97,9 @@ function App() {
       
       // Add remote clients (exclude frontend clients, only show backend clients)
       serverClients.forEach(client => {
+        console.log('Processing client:', client.client_id, 'starts with frontend:', client.client_id.startsWith('frontend-'));
         if (client.client_id !== localClientId && !client.client_id.startsWith('frontend-')) {
+          console.log('Adding backend client:', client.device_name);
           allDevices.push({
             ...client,
             isLocal: false
@@ -66,11 +107,22 @@ function App() {
         }
       });
       
+      console.log('Final devices list:', allDevices);
       setDevices(allDevices);
     } catch (error) {
       console.error('Failed to fetch clients from server:', error);
     }
-  }, [localClientId, localClientAvailable]);
+  }, [localClientId, localClientAvailable, frontendPublicIP]);
+
+  // Get public IP on component mount
+  useEffect(() => {
+    const initPublicIP = async () => {
+      const ip = await getPublicIP();
+      setFrontendPublicIP(ip);
+      console.log('Frontend public IP:', ip);
+    };
+    initPublicIP();
+  }, []);
 
   // Initialize WebRTC Manager
   useEffect(() => {
@@ -394,20 +446,18 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>DriveRTC File Manager</h1>
+      <div className="header">
+        <h1>DriveRTC - P2P File Sharing</h1>
         <div className="connection-status">
-          {localClientAvailable ? (
-            isConnected ? (
-              <><Wifi size={16} /> Local Client Connected</>
-            ) : (
-              <><WifiOff size={16} /> Local Client Disconnected</>
-            )
-          ) : (
-            <><Monitor size={16} /> Remote Only Mode</>
+          <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}></div>
+          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+          {frontendPublicIP && (
+            <div className="ip-info">
+              <small>Frontend IP: {frontendPublicIP}</small>
+            </div>
           )}
         </div>
-      </header>
+      </div>
 
       <div className="app-content">
         <div className="sidebar">
