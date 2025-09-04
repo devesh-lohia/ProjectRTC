@@ -34,14 +34,19 @@ class SimpleWebRTCManager:
             self.server_ws = await websockets.connect(uri, ssl=ssl_context)
             self.is_connected = True
             
-            # Register with server
+            # Get public IP from STUN server
+            public_ip = await self._get_public_ip_from_stun()
+            
+            # Register with server using public IP
             registration_msg = {
                 "type": "register",
                 "device_name": f"WebRTC-Client-{self.client_id[:8]}",
-                "ip_address": "127.0.0.1",
-                "local_port": 8001
+                "ip_address": public_ip,
+                "local_port": 8001,
+                "public_ip": public_ip,
+                "supports_webrtc": True
             }
-            logger.info(f"Sending registration: {registration_msg}")
+            logger.info(f"Sending registration with public IP {public_ip}: {registration_msg}")
             await self._send_to_server(registration_msg)
             
             # Start listening for signaling messages
@@ -175,6 +180,83 @@ class SimpleWebRTCManager:
             logger.error(f"Failed to send data to {peer_id}: {e}")
             return False
     
+    async def _get_public_ip_from_stun(self):
+        """Get public IP address using STUN server"""
+        try:
+            import socket
+            import struct
+            
+            # Simple STUN request to get public IP
+            stun_servers = [
+                ('stun.l.google.com', 19302),
+                ('stun1.l.google.com', 19302),
+                ('stun2.l.google.com', 19302)
+            ]
+            
+            for stun_host, stun_port in stun_servers:
+                try:
+                    # Create STUN binding request
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.settimeout(5)
+                    
+                    # STUN binding request message
+                    msg_type = 0x0001  # Binding Request
+                    msg_length = 0x0000
+                    magic_cookie = 0x2112A442
+                    transaction_id = b'\x00' * 12
+                    
+                    stun_request = struct.pack('!HHI12s', msg_type, msg_length, magic_cookie, transaction_id)
+                    
+                    sock.sendto(stun_request, (stun_host, stun_port))
+                    response, addr = sock.recvfrom(1024)
+                    sock.close()
+                    
+                    # Parse STUN response to get mapped address
+                    if len(response) >= 20:
+                        # Skip STUN header and look for XOR-MAPPED-ADDRESS attribute
+                        offset = 20
+                        while offset < len(response):
+                            if offset + 4 > len(response):
+                                break
+                            attr_type, attr_length = struct.unpack('!HH', response[offset:offset+4])
+                            
+                            if attr_type == 0x0020:  # XOR-MAPPED-ADDRESS
+                                if attr_length >= 8:
+                                    family, port, ip_bytes = struct.unpack('!HHI', response[offset+4:offset+12])
+                                    # XOR with magic cookie to get real IP
+                                    ip = socket.inet_ntoa(struct.pack('!I', ip_bytes ^ magic_cookie))
+                                    logger.info(f"Got public IP from STUN server {stun_host}: {ip}")
+                                    return ip
+                            
+                            offset += 4 + attr_length
+                            # Pad to 4-byte boundary
+                            offset = (offset + 3) & ~3
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to get IP from STUN server {stun_host}: {e}")
+                    continue
+            
+            # Fallback to local network IP
+            logger.warning("Could not get public IP from STUN servers, using local network IP")
+            return self._get_local_network_ip()
+            
+        except Exception as e:
+            logger.error(f"Error getting public IP: {e}")
+            return "127.0.0.1"
+    
+    def _get_local_network_ip(self):
+        """Get local network IP address"""
+        try:
+            import socket
+            # Connect to a remote address to determine local IP
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            local_ip = sock.getsockname()[0]
+            sock.close()
+            return local_ip
+        except:
+            return "127.0.0.1"
+
     async def close_all_connections(self):
         """Close all connections"""
         self.is_connected = False

@@ -13,12 +13,16 @@ class WebRTCManager {
         this.signalingSocket = null;
         this.isConnected = false;
         
-        // WebRTC configuration
+        // WebRTC configuration with STUN servers for NAT traversal
         this.rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 10
         };
         
         // Event handlers
@@ -49,16 +53,19 @@ class WebRTCManager {
             
             this.signalingSocket = new WebSocket(`${wsUrl}/ws/${this.localPeerId}`);
             
-            this.signalingSocket.onopen = () => {
+            this.signalingSocket.onopen = async () => {
                 console.log('Connected to signaling server');
                 this.isConnected = true;
                 
-                // Register as frontend client
+                // Get public IP and register as frontend client
+                const publicIP = await this.getPublicIP();
                 this.sendSignalingMessage({
                     type: 'register',
                     device_name: `Frontend-${this.localPeerId.substr(-8)}`,
-                    ip_address: window.location.hostname,
-                    local_port: window.location.port || 3000
+                    ip_address: publicIP,
+                    local_port: window.location.port || 3000,
+                    public_ip: publicIP,
+                    supports_webrtc: true
                 });
                 
                 resolve();
@@ -347,6 +354,19 @@ class WebRTCManager {
         }
     }
     
+    async getPublicIP() {
+        try {
+            // Use a public IP service to get the real public IP
+            const response = await fetch('https://api.ipify.org?format=json');
+            const data = await response.json();
+            console.log('Got public IP:', data.ip);
+            return data.ip;
+        } catch (error) {
+            console.warn('Failed to get public IP, using hostname:', error);
+            return window.location.hostname;
+        }
+    }
+
     disconnect() {
         // Close all peer connections
         for (const [peerId] of this.peerConnections) {
