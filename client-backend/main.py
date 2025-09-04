@@ -21,12 +21,30 @@ from datetime import datetime
 from webrtc_manager import WebRTCManager
 from file_transfer import FileTransferManager, TransferStatus
 from config import *
+from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DriveRTC Client", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application lifespan events"""
+    # Startup
+    logger.info(f"Starting DriveRTC Client - {DEVICE_NAME}")
+    logger.info(f"Shared folder: {SHARED_FOLDER}")
+    
+    # Initialize managers
+    await initialize_managers()
+    
+    yield
+    
+    # Shutdown
+    if webrtc_manager:
+        await webrtc_manager.close_all_connections()
+    logger.info("DriveRTC Client shutdown complete")
+
+app = FastAPI(title="DriveRTC Client", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -146,14 +164,22 @@ async def broadcast_to_frontend(message: dict):
             except Exception:
                 frontend_connections.remove(websocket)
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize client on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application lifespan events"""
+    # Startup
     logger.info(f"Starting DriveRTC Client - {DEVICE_NAME}")
     logger.info(f"Shared folder: {SHARED_FOLDER}")
     
     # Initialize managers
     await initialize_managers()
+    
+    yield
+    
+    # Shutdown
+    if webrtc_manager:
+        await webrtc_manager.close_all_connections()
+    logger.info("DriveRTC Client shutdown complete")
 
 @app.get("/")
 async def root():
@@ -285,9 +311,7 @@ async def websocket_endpoint(websocket: WebSocket):
             "shared_folder": SHARED_FOLDER
         }))
         
-        # Request peer list from server
-        if server_websocket:
-            await server_websocket.send(json.dumps({"type": "get_clients"}))
+        # Request peer list from server (removed - not needed for frontend websocket)
         
         while True:
             data = await websocket.receive_text()

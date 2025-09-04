@@ -31,6 +31,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [localClientId, setLocalClientId] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [localClientAvailable, setLocalClientAvailable] = useState(false);
 
   // Fetch clients from server
   const fetchClientsFromServer = useCallback(async () => {
@@ -40,7 +41,7 @@ function App() {
       
       // Add local client if we have one
       const allDevices = [];
-      if (localClientId) {
+      if (localClientAvailable && localClientId) {
         allDevices.push({
           client_id: localClientId,
           device_name: 'This Device (Local)',
@@ -51,59 +52,89 @@ function App() {
         });
       }
       
-      // Add remote clients
+      // Add remote clients (exclude local client if it's already in server list)
       serverClients.forEach(client => {
-        allDevices.push({
-          ...client,
-          isLocal: false
-        });
+        if (client.client_id !== localClientId) {
+          allDevices.push({
+            ...client,
+            isLocal: false
+          });
+        }
       });
       
       setDevices(allDevices);
     } catch (error) {
       console.error('Failed to fetch clients from server:', error);
     }
-  }, [localClientId]);
+  }, [localClientId, localClientAvailable]);
 
-  // WebSocket connection to local client backend
+  // Check if local client backend is available
+  const checkLocalClientAvailability = useCallback(async () => {
+    try {
+      const response = await axios.get(`${CLIENT_BACKEND_URL}/`, { timeout: 3000 });
+      setLocalClientAvailable(true);
+      return true;
+    } catch (error) {
+      setLocalClientAvailable(false);
+      return false;
+    }
+  }, []);
+
+  // Initialize local client connection
   useEffect(() => {
-    const wsUrl = CLIENT_BACKEND_URL.replace('http', 'ws');
-    const websocket = new WebSocket(`${wsUrl}/ws`);
-    
-    websocket.onopen = () => {
-      setIsConnected(true);
-      setWs(websocket);
-    };
-    
-    websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    const initializeLocalClient = async () => {
+      const isAvailable = await checkLocalClientAvailability();
       
-      switch (data.type) {
-        case 'client_info':
-          // Store local client ID and fetch all clients from server
-          setLocalClientId(data.client_id);
-          break;
+      if (isAvailable) {
+        // Try to establish WebSocket connection
+        const wsUrl = CLIENT_BACKEND_URL.replace('http', 'ws');
+        const websocket = new WebSocket(`${wsUrl}/ws`);
+        
+        websocket.onopen = () => {
+          setIsConnected(true);
+          setWs(websocket);
+        };
+        
+        websocket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
           
-        case 'files_list':
-          setFiles(data.data.files);
-          setCurrentPath(data.data.current_path);
-          setLoading(false);
-          break;
-          
-        default:
-          break;
+          switch (data.type) {
+            case 'client_info':
+              // Store local client ID and fetch all clients from server
+              setLocalClientId(data.client_id);
+              break;
+              
+            case 'files_list':
+              setFiles(data.data.files);
+              setCurrentPath(data.data.current_path);
+              setLoading(false);
+              break;
+              
+            default:
+              break;
+          }
+        };
+        
+        websocket.onclose = () => {
+          setIsConnected(false);
+          setWs(null);
+          setLocalClientAvailable(false);
+        };
+        
+        websocket.onerror = () => {
+          setLocalClientAvailable(false);
+        };
+        
+        return () => {
+          websocket.close();
+        };
+      } else {
+        console.log('Local client backend not available - running in remote-only mode');
       }
     };
     
-    websocket.onclose = () => {
-      setIsConnected(false);
-      setWs(null);
-    };
-    
-    return () => {
-      websocket.close();
-    };
-  }, []);
+    initializeLocalClient();
+  }, [checkLocalClientAvailability]);
 
   // Fetch clients from server when localClientId is set
   useEffect(() => {
@@ -296,10 +327,14 @@ function App() {
       <header className="app-header">
         <h1>DriveRTC File Manager</h1>
         <div className="connection-status">
-          {isConnected ? (
-            <><Wifi size={16} /> Connected</>
+          {localClientAvailable ? (
+            isConnected ? (
+              <><Wifi size={16} /> Local Client Connected</>
+            ) : (
+              <><WifiOff size={16} /> Local Client Disconnected</>
+            )
           ) : (
-            <><WifiOff size={16} /> Disconnected</>
+            <><Monitor size={16} /> Remote Only Mode</>
           )}
         </div>
       </header>
