@@ -14,6 +14,7 @@ import {
   Upload,
   Clipboard
 } from 'lucide-react';
+import WebRTCManager from './WebRTCManager';
 import './App.css';
 
 const CLIENT_BACKEND_URL = process.env.REACT_APP_CLIENT_BACKEND_URL || 'http://localhost:8001';
@@ -32,6 +33,9 @@ function App() {
   const [localClientId, setLocalClientId] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [localClientAvailable, setLocalClientAvailable] = useState(false);
+  const [webrtcManager, setWebrtcManager] = useState(null);
+  const [p2pConnections, setP2pConnections] = useState(new Map());
+  const [transferProgress, setTransferProgress] = useState(new Map());
 
   // Fetch clients from server
   const fetchClientsFromServer = useCallback(async () => {
@@ -68,17 +72,83 @@ function App() {
     }
   }, [localClientId, localClientAvailable]);
 
-  // Check if local client backend is available
-  const checkLocalClientAvailability = useCallback(async () => {
+  // Initialize WebRTC Manager
+  useEffect(() => {
+    const initWebRTC = async () => {
+      const manager = new WebRTCManager(SERVER_BACKEND_URL, CLIENT_BACKEND_URL);
+      
+      // Set up event handlers
+      manager.onPeerConnected = (peerId) => {
+        console.log(`P2P connection established with ${peerId}`);
+        setP2pConnections(prev => new Map(prev.set(peerId, true)));
+      };
+      
+      manager.onPeerDisconnected = (peerId) => {
+        console.log(`P2P connection lost with ${peerId}`);
+        setP2pConnections(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(peerId);
+          return newMap;
+        });
+      };
+      
+      manager.onTransferProgress = (progressInfo) => {
+        setTransferProgress(prev => new Map(prev.set(progressInfo.peerId, progressInfo)));
+      };
+      
+      manager.onDataReceived = (peerId, data) => {
+        console.log(`Received data from ${peerId}:`, data);
+        // Handle received file data
+        if (data.type === 'file_metadata') {
+          console.log(`Receiving file: ${data.name} (${data.size} bytes)`);
+        } else if (data.type === 'file_chunk') {
+          console.log(`Received chunk ${data.chunk_index + 1}/${data.total_chunks}`);
+        } else if (data.type === 'transfer_complete') {
+          console.log(`File transfer completed: ${data.fileName}`);
+        }
+      };
+      
+      // Initialize WebRTC connection
+      const success = await manager.initialize();
+      if (success) {
+        setWebrtcManager(manager);
+        console.log('WebRTC Manager initialized successfully');
+      }
+    };
+    
+    initWebRTC();
+    
+    return () => {
+      if (webrtcManager) {
+        webrtcManager.disconnect();
+      }
+    };
+  }, []);
+
+  // Check local client availability
+  useEffect(() => {
+    const checkLocalClient = async () => {
+      try {
+        await axios.get(`${CLIENT_BACKEND_URL}/`);
+        setLocalClientAvailable(true);
+        setLocalClientId('local-client-' + Date.now());
+      } catch (error) {
+        setLocalClientAvailable(false);
+      }
+    };
+    
+    checkLocalClient();
+  }, []);
+
+  // Check local client availability function
+  const checkLocalClientAvailability = async () => {
     try {
-      await axios.get(`${CLIENT_BACKEND_URL}/`, { timeout: 3000 });
-      setLocalClientAvailable(true);
+      await axios.get(`${CLIENT_BACKEND_URL}/`);
       return true;
     } catch (error) {
-      setLocalClientAvailable(false);
       return false;
     }
-  }, []);
+  };
 
   // Initialize local client connection
   useEffect(() => {

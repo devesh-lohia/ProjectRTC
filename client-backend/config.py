@@ -4,12 +4,8 @@ import psutil
 from pathlib import Path
 
 # Server configuration
-SERVER_URL = os.getenv("DRIVERTC_SERVER_URL", "ws://localhost:8000")
-SERVER_HTTP_URL = os.getenv("DRIVERTC_SERVER_HTTP_URL", "http://localhost:8000")
-
-# For production deployment, update these to your actual server URLs:
-# SERVER_URL = "wss://your-server-domain.com"
-# SERVER_HTTP_URL = "https://your-server-domain.com"
+SERVER_URL = os.getenv("DRIVERTC_SERVER_URL", "wss://secret-bridie-drivertc-bbe7d7d5.koyeb.app")
+SERVER_HTTP_URL = os.getenv("DRIVERTC_SERVER_HTTP_URL", "https://secret-bridie-drivertc-bbe7d7d5.koyeb.app")
 
 # Client configuration
 CLIENT_ID = str(uuid.uuid4())

@@ -18,7 +18,7 @@ import psutil
 import aiofiles
 from datetime import datetime
 
-from webrtc_manager import WebRTCManager
+from webrtc_simple import SimpleWebRTCManager
 from file_transfer import FileTransferManager, TransferStatus
 from config import *
 from contextlib import asynccontextmanager
@@ -56,8 +56,8 @@ app.add_middleware(
 )
 
 # Global state
-webrtc_manager: Optional[WebRTCManager] = None
-file_transfer_manager: Optional[FileTransferManager] = None
+webrtc_manager: Optional[SimpleWebRTCManager] = None
+file_transfer_manager = None
 frontend_connections: List[WebSocket] = []
 
 # Data models
@@ -141,7 +141,7 @@ async def initialize_managers():
     """Initialize WebRTC and file transfer managers"""
     global webrtc_manager, file_transfer_manager
     
-    webrtc_manager = WebRTCManager(CLIENT_ID, SERVER_URL)
+    webrtc_manager = SimpleWebRTCManager(CLIENT_ID, SERVER_URL)
     file_transfer_manager = FileTransferManager(SHARED_FOLDER, CHUNK_SIZE)
     
     # Register message handlers
@@ -153,6 +153,10 @@ async def initialize_managers():
     
     # Connect to server
     await webrtc_manager.connect_to_server()
+    
+    logger.info("WebRTC and file transfer managers initialized")
+
+# Remove old connection code since WebRTC manager handles server connection
 
 async def broadcast_to_frontend(message: dict):
     """Broadcast message to all connected frontend clients"""
@@ -320,9 +324,11 @@ async def websocket_endpoint(websocket: WebSocket):
             if message["type"] == "get_files":
                 path = message.get("path", "")
                 files_data = await list_files(path)
+                # Convert FileInfo objects to dictionaries
+                files_dict = [file_info.dict() for file_info in files_data]
                 await websocket.send_text(json.dumps({
                     "type": "files_list",
-                    "data": files_data
+                    "data": files_dict
                 }))
             
             elif message["type"] == "transfer_request":
