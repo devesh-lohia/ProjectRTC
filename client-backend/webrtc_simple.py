@@ -49,8 +49,9 @@ class SimpleWebRTCManager:
             logger.info(f"Sending registration with public IP {public_ip}: {registration_msg}")
             await self._send_to_server(registration_msg)
             
-            # Start listening for signaling messages
+            # Start listening for signaling messages and keep alive
             asyncio.create_task(self._listen_for_signaling())
+            asyncio.create_task(self._keep_alive())
             
             logger.info("Connected to signaling server")
             return True
@@ -78,11 +79,17 @@ class SimpleWebRTCManager:
                 await self._handle_signaling_message(data)
                 
         except websockets.exceptions.ConnectionClosed:
-            logger.info("Signaling server connection closed")
+            logger.info("Signaling server connection closed, attempting reconnect...")
             self.is_connected = False
+            # Attempt to reconnect after a delay
+            await asyncio.sleep(5)
+            await self.connect_to_signaling_server()
         except Exception as e:
             logger.error(f"Error in signaling listener: {e}")
             self.is_connected = False
+            # Attempt to reconnect after a delay
+            await asyncio.sleep(5)
+            await self.connect_to_signaling_server()
     
     async def _handle_signaling_message(self, message: dict):
         """Handle signaling messages from server"""
@@ -256,6 +263,18 @@ class SimpleWebRTCManager:
             return local_ip
         except:
             return "127.0.0.1"
+
+    async def _keep_alive(self):
+        """Send periodic ping to keep connection alive"""
+        while self.is_connected:
+            try:
+                await asyncio.sleep(30)  # Ping every 30 seconds
+                if self.is_connected and self.server_ws:
+                    await self._send_to_server({"type": "ping"})
+                    logger.debug("Sent keep-alive ping")
+            except Exception as e:
+                logger.error(f"Error in keep-alive: {e}")
+                break
 
     async def close_all_connections(self):
         """Close all connections"""

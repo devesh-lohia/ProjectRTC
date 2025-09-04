@@ -56,9 +56,9 @@ function App() {
         });
       }
       
-      // Add remote clients (exclude local client if it's already in server list)
+      // Add remote clients (exclude frontend clients, only show backend clients)
       serverClients.forEach(client => {
-        if (client.client_id !== localClientId) {
+        if (client.client_id !== localClientId && !client.client_id.startsWith('frontend-')) {
           allDevices.push({
             ...client,
             isLocal: false
